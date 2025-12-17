@@ -35,4 +35,4 @@ go.work.sum
 bin/
 _build/
 dist/
-/home/skorgum/workspace/Chirpy/out
+out
