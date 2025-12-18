@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync/atomic"
 )
 
@@ -77,37 +78,53 @@ func (cfg *apiConfig) handlerValidateChirp(w http.ResponseWriter, r *http.Reques
 	params := parameters{}
 	err := decoder.Decode(&params)
 	if err != nil {
-		log.Printf("Error decoding parameters: %s", err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-
-		response := struct {
-			Error string `json:"error"`
-		}{
-			Error: "Something went wrong",
-		}
-		json.NewEncoder(w).Encode(response)
+		respondWithError(w, http.StatusInternalServerError, "Something went wrong", err)
 		return
 	}
 
 	if len(params.Body) > 140 {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		response := struct {
-			Error string `json:"error"`
-		}{
-			Error: "Chirp is too long",
-		}
-		json.NewEncoder(w).Encode(response)
+		respondWithError(w, http.StatusBadRequest, "Chirp is too long", err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 
 	response := struct {
-		Valid bool `json:"valid"`
+		CleanedBody string `json:"cleaned_body"`
 	}{
-		Valid: true,
+		CleanedBody: cleanChirp(params.Body),
+	}
+	respondWithJSON(w, http.StatusOK, response)
+}
+
+func respondWithError(w http.ResponseWriter, status int, msg string, err error) {
+	if err != nil {
+		log.Printf("Error: %v", err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	response := struct {
+		Error string `json:"error"`
+	}{
+		Error: msg,
 	}
 	json.NewEncoder(w).Encode(response)
+}
+
+func respondWithJSON(w http.ResponseWriter, status int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(payload)
+}
+
+func cleanChirp(body string) string {
+	badwords := []string{"kerfuffle", "sharbert", "fornax"}
+	words := strings.Split(body, " ")
+	for i, word := range words {
+		for _, badword := range badwords {
+			if strings.EqualFold(word, badword) {
+				words[i] = "****"
+			}
+		}
+	}
+	return strings.Join(words, " ")
 }
