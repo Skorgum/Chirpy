@@ -18,6 +18,7 @@ import (
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	db             *database.Queries
+	platform       string
 }
 
 func main() {
@@ -27,6 +28,7 @@ func main() {
 	}
 
 	dbURL := os.Getenv("DB_URL")
+	platform := os.Getenv("PLATFORM")
 
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -39,6 +41,7 @@ func main() {
 	apiCfg := apiConfig{
 		fileserverHits: atomic.Int32{},
 		db:             dbQueries,
+		platform:       platform,
 	}
 
 	const filepathRoot = "."
@@ -51,6 +54,7 @@ func main() {
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics)
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 	mux.HandleFunc("POST /api/validate_chirp", apiCfg.handlerValidateChirp)
+	mux.HandleFunc("POST /api/users", apiCfg.handlerUsersCreate)
 
 	server := &http.Server{
 		Addr:    port,
@@ -89,6 +93,16 @@ func (cfg *apiConfig) handlerMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handlerReset(w http.ResponseWriter, r *http.Request) {
+	if cfg.platform != "dev" {
+		respondWithError(w, http.StatusForbidden, "Reset is only allowed in dev environment", nil)
+		return
+	}
+
+	err := cfg.db.DeleteUsers(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to reset users", err)
+		return
+	}
 	cfg.fileserverHits.Store(0)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Hits reset to 0"))
