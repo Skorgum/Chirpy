@@ -5,12 +5,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Skorgum/Chirpy/internal/auth"
+	"github.com/Skorgum/Chirpy/internal/database"
 	"github.com/google/uuid"
 )
-
-type parameters struct {
-	Email string `json:"email"`
-}
 
 type response struct {
 	ID        uuid.UUID `json:"id"`
@@ -20,6 +18,11 @@ type response struct {
 }
 
 func (apiCfg *apiConfig) handlerUsersCreate(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
 	err := decoder.Decode(&params)
@@ -28,7 +31,16 @@ func (apiCfg *apiConfig) handlerUsersCreate(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	user, err := apiCfg.db.CreateUser(r.Context(), params.Email)
+	hashedPassword, err := auth.HashPassword(params.Password)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to hash password", err)
+		return
+	}
+
+	user, err := apiCfg.db.CreateUser(r.Context(), database.CreateUserParams{
+		Email:          params.Email,
+		HashedPassword: hashedPassword,
+	})
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to create user", err)
 		return
