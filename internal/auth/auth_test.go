@@ -127,3 +127,68 @@ func TestValidateJWT(t *testing.T) {
 		})
 	}
 }
+
+func TestGetBearerToken(t *testing.T) {
+	tests := []struct {
+		name      string
+		headerVal string
+		wantToken string
+		wantErr   bool
+	}{
+		{
+			name:      "valid bearer token",
+			headerVal: "Bearer abc.def.ghi",
+			wantToken: "abc.def.ghi",
+			wantErr:   false,
+		},
+		{
+			name:      "missing header",
+			headerVal: "",
+			wantToken: "",
+			wantErr:   true,
+		},
+		{
+			name:      "wrong prefix",
+			headerVal: "Token abc.def.ghi",
+			wantToken: "",
+			wantErr:   true,
+		},
+		{
+			name:      "extra spaces",
+			headerVal: "Bearer    abc.def.ghi",
+			wantToken: "abc.def.ghi",
+			wantErr:   false,
+		},
+		{
+			name:      "no token",
+			headerVal: "Bearer",
+			wantToken: "",
+			wantErr:   true,
+		},
+		{
+			name:      "bearer with only spaces",
+			headerVal: "Bearer    ",
+			wantToken: "",
+			wantErr:   true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			headers := make(map[string][]string)
+			if tt.headerVal != "" {
+				headers["Authorization"] = []string{tt.headerVal}
+			}
+			got, err := GetBearerToken(headers)
+
+			if tt.wantErr && err == nil {
+				t.Fatalf("Expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			if got != tt.wantToken {
+				t.Errorf("expected token %v, got %v", tt.wantToken, got)
+			}
+		})
+	}
+}

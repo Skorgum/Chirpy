@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Skorgum/Chirpy/internal/auth"
 	"github.com/Skorgum/Chirpy/internal/database"
 	"github.com/google/uuid"
 )
@@ -20,9 +21,20 @@ type Chirp struct {
 }
 
 func (apiCfg *apiConfig) handlerChirpsCreate(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized", err)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(token, apiCfg.jwtSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized", err)
+		return
+	}
+
 	type parameters struct {
-		Body   string    `json:"body"`
-		UserID uuid.UUID `json:"user_id"`
+		Body string `json:"body"`
 	}
 
 	var params parameters
@@ -39,7 +51,7 @@ func (apiCfg *apiConfig) handlerChirpsCreate(w http.ResponseWriter, r *http.Requ
 
 	chirp, err := apiCfg.db.CreateChirp(r.Context(), database.CreateChirpParams{
 		Body:   cleaned,
-		UserID: params.UserID,
+		UserID: userID,
 	})
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to create chirp", err)
