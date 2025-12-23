@@ -10,14 +10,26 @@ import (
 	"github.com/google/uuid"
 )
 
-type response struct {
+type userResponse struct {
 	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
 }
 
-func (apiCfg *apiConfig) handlerUsersCreate(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handlerUsersUpdate(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Couldn't find token", err)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(token, cfg.jwtSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Couldn't validate token", err)
+		return
+	}
+
 	type parameters struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -25,7 +37,7 @@ func (apiCfg *apiConfig) handlerUsersCreate(w http.ResponseWriter, r *http.Reque
 
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
-	err := decoder.Decode(&params)
+	err = decoder.Decode(&params)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Something went wrong", err)
 		return
@@ -37,16 +49,17 @@ func (apiCfg *apiConfig) handlerUsersCreate(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	user, err := apiCfg.db.CreateUser(r.Context(), database.CreateUserParams{
+	user, err := cfg.db.UpdateUser(r.Context(), database.UpdateUserParams{
+		ID:             userID,
 		Email:          params.Email,
 		HashedPassword: hashedPassword,
 	})
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to create user", err)
+		respondWithError(w, http.StatusInternalServerError, "Failed to update user", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusCreated, response{
+	respondWithJSON(w, http.StatusOK, userResponse{
 		ID:        user.ID,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
