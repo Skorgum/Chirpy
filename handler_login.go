@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Skorgum/Chirpy/internal/auth"
+	"github.com/Skorgum/Chirpy/internal/database"
 	"github.com/google/uuid"
 )
 
@@ -25,13 +26,6 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	expiresIn := time.Hour
-	if params.ExpiresInSeconds > 0 {
-		maxSeconds := int(time.Hour.Seconds())
-		if params.ExpiresInSeconds > maxSeconds {
-			params.ExpiresInSeconds = maxSeconds
-		}
-		expiresIn = time.Duration(params.ExpiresInSeconds) * time.Second
-	}
 
 	user, err := cfg.db.GetUserByEmail(r.Context(), params.Email)
 	if err != nil {
@@ -46,25 +40,46 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type response struct {
-		ID        uuid.UUID `json:"id"`
-		CreatedAt time.Time `json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
-		Email     string    `json:"email"`
-		Token     string    `json:"token"`
+		ID           uuid.UUID `json:"id"`
+		CreatedAt    time.Time `json:"created_at"`
+		UpdatedAt    time.Time `json:"updated_at"`
+		Email        string    `json:"email"`
+		Token        string    `json:"token"`
+		RefreshToken string    `json:"refresh_token,omitempty"`
 	}
 
-	token, err := auth.MakeJWT(user.ID, cfg.jwtSecret, expiresIn)
+	accessToken, err := auth.MakeJWT(user.ID, cfg.jwtSecret, expiresIn)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to create token", err)
+		return
+	}
+
+	refreshToken, err := auth.MakeRefreshToken()
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to create token", err)
+		return
+	}
+
+	now := time.Now().UTC()
+	expiresAt := now.Add(60 * 24 * time.Hour) // Refresh token valid for 60 days
+
+	_, err = cfg.db.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
+		Token:     refreshToken,
+		UserID:    user.ID,
+		ExpiresAt: expiresAt,
+	})
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to create token", err)
 		return
 	}
 
 	res := response{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
-		Token:     token,
+		ID:           user.ID,
+		CreatedAt:    user.CreatedAt,
+		UpdatedAt:    user.UpdatedAt,
+		Email:        user.Email,
+		Token:        accessToken,
+		RefreshToken: refreshToken,
 	}
 	respondWithJSON(w, http.StatusOK, res)
 }
