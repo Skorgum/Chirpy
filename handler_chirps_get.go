@@ -13,15 +13,41 @@ func (apiCfg *apiConfig) handlerChirpsGetAll(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	authorIDStr := r.URL.Query().Get("author_id")
+
+	if authorIDStr == "" {
+		chirps := []Chirp{}
+		for _, dbChirp := range dbChirps {
+			chirps = append(chirps, Chirp{
+				ID:        dbChirp.ID,
+				CreatedAt: dbChirp.CreatedAt,
+				UpdatedAt: dbChirp.UpdatedAt,
+				UserID:    dbChirp.UserID,
+				Body:      dbChirp.Body,
+			})
+		}
+
+		respondWithJSON(w, http.StatusOK, chirps)
+		return
+	}
+
+	authorID, err := uuid.Parse(authorIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid author ID", err)
+		return
+	}
+
 	chirps := []Chirp{}
 	for _, dbChirp := range dbChirps {
-		chirps = append(chirps, Chirp{
-			ID:        dbChirp.ID,
-			CreatedAt: dbChirp.CreatedAt,
-			UpdatedAt: dbChirp.UpdatedAt,
-			UserID:    dbChirp.UserID,
-			Body:      dbChirp.Body,
-		})
+		if dbChirp.UserID == authorID {
+			chirps = append(chirps, Chirp{
+				ID:        dbChirp.ID,
+				CreatedAt: dbChirp.CreatedAt,
+				UpdatedAt: dbChirp.UpdatedAt,
+				UserID:    dbChirp.UserID,
+				Body:      dbChirp.Body,
+			})
+		}
 	}
 
 	respondWithJSON(w, http.StatusOK, chirps)
